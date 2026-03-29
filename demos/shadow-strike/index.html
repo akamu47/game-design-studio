@@ -419,29 +419,80 @@ function shoot(){
   ammo[currentWeapon]--;
   playSound(w.sound);
 
+  const dmgMult=activePowerups.damage>Date.now()?2:1;
   const pelletCount=w.pellets||1;
+
   for(let p=0;p<pelletCount;p++){
     const dir=new THREE.Vector3(0,0,-1);
     dir.applyAxisAngle(new THREE.Vector3(1,0,0),pitch+(Math.random()-0.5)*w.spread);
     dir.applyAxisAngle(new THREE.Vector3(0,1,0),yaw+(Math.random()-0.5)*w.spread);
+    dir.normalize();
 
-    const projGeo=new THREE.SphereGeometry(w.explosive?0.15:0.05,4,4);
-    const projMat=new THREE.MeshBasicMaterial({color:w.color});
-    const proj=new THREE.Mesh(projGeo,projMat);
-    proj.position.copy(camera.position);
-    proj.userData={dir:dir.clone(),speed:w.projectileSpeed,damage:w.damage*(activePowerups.damage>Date.now()?2:1),explosive:!!w.explosive,life:0};
-    scene.add(proj);
-    projectiles.push(proj);
+    if(w.explosive){
+      // RPG: real projectile that travels
+      const projGeo=new THREE.SphereGeometry(0.15,4,4);
+      const projMat=new THREE.MeshBasicMaterial({color:w.color});
+      const proj=new THREE.Mesh(projGeo,projMat);
+      proj.position.copy(camera.position);
+      proj.userData={dir:dir.clone(),speed:w.projectileSpeed,damage:w.damage*dmgMult,explosive:true,life:0};
+      scene.add(proj);
+      projectiles.push(proj);
+    } else {
+      // Hitscan: instant raycast from camera in the aim direction
+      raycaster.set(camera.position.clone(), dir.clone());
+      raycaster.far=200;
 
-    // Muzzle flash (trail)
-    const trailGeo=new THREE.CylinderGeometry(0.01,0.03,0.5,4);
-    const trailMat=new THREE.MeshBasicMaterial({color:w.color,transparent:true,opacity:0.6});
-    const trail=new THREE.Mesh(trailGeo,trailMat);
-    trail.position.copy(camera.position).add(dir.clone().multiplyScalar(0.5));
-    trail.lookAt(camera.position.clone().add(dir));
-    trail.rotation.x+=Math.PI/2;
-    scene.add(trail);
-    setTimeout(()=>scene.remove(trail),50);
+      // Check all enemy body meshes
+      let hitEnemy=null;
+      let hitDist=Infinity;
+      let hitPoint=null;
+      for(const e of enemies){
+        // Build a bounding sphere for the enemy based on its size and position
+        const center=e.position.clone();
+        center.y+=e.userData.size/2;
+        const radius=e.userData.size*0.55;
+        // Manual ray-sphere intersection (more reliable than intersectObjects on groups)
+        const oc=new THREE.Vector3().subVectors(camera.position, center);
+        const b=oc.dot(dir);
+        const c=oc.dot(oc)-radius*radius;
+        const disc=b*b-c;
+        if(disc>=0){
+          const t=-b-Math.sqrt(disc);
+          if(t>0.3&&t<hitDist){
+            hitDist=t;
+            hitEnemy=e;
+            hitPoint=camera.position.clone().add(dir.clone().multiplyScalar(t));
+          }
+        }
+      }
+
+      // Determine tracer end point
+      let traceEnd;
+      if(hitEnemy){
+        traceEnd=hitPoint;
+        damageEnemy(hitEnemy,w.damage*dmgMult);
+      } else {
+        traceEnd=camera.position.clone().add(dir.clone().multiplyScalar(100));
+      }
+
+      // Draw tracer line
+      const tracerGeo=new THREE.BufferGeometry().setFromPoints([
+        camera.position.clone().add(dir.clone().multiplyScalar(0.5)),
+        traceEnd
+      ]);
+      const tracerMat=new THREE.LineBasicMaterial({color:w.color,transparent:true,opacity:0.6});
+      const tracer=new THREE.Line(tracerGeo,tracerMat);
+      scene.add(tracer);
+      // Fade out tracer
+      let fade=1;
+      const fadeTracer=()=>{
+        fade-=0.08;
+        tracerMat.opacity=Math.max(0,fade*0.6);
+        if(fade>0)requestAnimationFrame(fadeTracer);
+        else{scene.remove(tracer);tracerGeo.dispose();tracerMat.dispose();}
+      };
+      requestAnimationFrame(fadeTracer);
+    }
   }
 
   if(ammo[currentWeapon]<=0){
@@ -733,11 +784,13 @@ function animate(){
   }
   camera.position.y=1.7;
 
-  // Projectiles
+  // Projectiles (RPG only now — other weapons use hitscan)
   for(let i=projectiles.length-1;i>=0;i--){
     const p=projectiles[i];
     p.userData.life++;
-    p.position.add(p.userData.dir.clone().multiplyScalar(p.userData.speed));
+    const moveVec=p.userData.dir.clone().multiplyScalar(p.userData.speed);
+    const oldPos=p.position.clone();
+    p.position.add(moveVec);
 
     if(p.userData.life>200){
       scene.remove(p);
@@ -745,23 +798,39 @@ function animate(){
       continue;
     }
 
-    // Check enemy hits
+    // Swept ray check between old and new position for RPG
     let hit=false;
+    const sweepDir=p.position.clone().sub(oldPos).normalize();
+    const sweepDist=oldPos.distanceTo(p.position);
     for(const e of enemies){
-      if(p.position.distanceTo(e.position.clone().add(new THREE.Vector3(0,e.userData.size/2,0)))<e.userData.size*0.6){
-        if(p.userData.explosive){
-          createExplosion(p.position.clone());
-        }else{
-          damageEnemy(e,p.userData.damage);
+      const center=e.position.clone();
+      center.y+=e.userData.size/2;
+      const radius=e.userData.size*0.7; // generous hitbox for rockets
+      // Ray-sphere intersection along the travel path
+      const oc=oldPos.clone().sub(center);
+      const b=oc.dot(sweepDir);
+      const c=oc.dot(oc)-radius*radius;
+      const disc=b*b-c;
+      if(disc>=0){
+        const t=-b-Math.sqrt(disc);
+        if(t>=0&&t<=sweepDist+0.5){
+          const hitPt=oldPos.clone().add(sweepDir.clone().multiplyScalar(Math.max(0,t)));
+          createExplosion(hitPt);
+          hit=true;
+          break;
         }
+      }
+      // Also check simple distance as fallback
+      if(p.position.distanceTo(center)<radius){
+        createExplosion(p.position.clone());
         hit=true;
         break;
       }
     }
 
     // Check wall hits
-    if(!hit&&checkCollision(p.position,0.1)){
-      if(p.userData.explosive)createExplosion(p.position.clone());
+    if(!hit&&checkCollision(p.position,0.3)){
+      createExplosion(p.position.clone());
       hit=true;
     }
 
