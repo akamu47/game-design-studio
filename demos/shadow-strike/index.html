@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHADOW STRIKE - Playable Demo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#0a0a12;font-family:'Segoe UI',system-ui,sans-serif;color:#e0e0e0;cursor:crosshair}
+canvas{display:block;width:100vw;height:100vh}
+#blocker{position:fixed;inset:0;background:rgba(5,5,15,0.92);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(8px)}
+#menu{text-align:center;max-width:500px;padding:40px}
+#menu h1{font-size:42px;font-weight:800;letter-spacing:4px;background:linear-gradient(135deg,#00f0ff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+#menu .tagline{color:#888;font-size:14px;margin-bottom:24px;font-style:italic}
+#menu .designers{color:#666;font-size:12px;margin-bottom:32px}
+#menu .start-btn{background:linear-gradient(135deg,#00f0ff,#0088aa);color:#000;border:none;padding:14px 48px;font-size:16px;font-weight:700;border-radius:8px;cursor:pointer;letter-spacing:2px;transition:all .2s}
+#menu .start-btn:hover{transform:scale(1.05);box-shadow:0 0 30px rgba(0,240,255,0.4)}
+#menu .controls{margin-top:28px;color:#555;font-size:11px;line-height:1.8}
+#menu .controls span{color:#00f0ff;font-weight:600}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:50}
+#crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:51;pointer-events:none}
+#crosshair div{position:absolute;background:#00f0ff;opacity:0.8}
+#crosshair .h{width:16px;height:2px;top:50%;left:50%;transform:translate(-50%,-50%)}
+#crosshair .h1{margin-left:-14px}
+#crosshair .h2{margin-left:14px}
+#crosshair .v{width:2px;height:16px;top:50%;left:50%;transform:translate(-50%,-50%)}
+#crosshair .v1{margin-top:-14px}
+#crosshair .v2{margin-top:14px}
+#health-bar{position:fixed;bottom:30px;left:30px;z-index:51}
+#health-bar .label{font-size:10px;color:#666;letter-spacing:2px;margin-bottom:4px}
+#health-bar .bar{width:200px;height:6px;background:#1a1a2e;border-radius:3px;overflow:hidden}
+#health-bar .fill{height:100%;background:linear-gradient(90deg,#ff3366,#00f0ff);border-radius:3px;transition:width .3s}
+#health-val{font-size:28px;font-weight:800;color:#00f0ff;margin-top:2px}
+#ammo-display{position:fixed;bottom:30px;right:30px;text-align:right;z-index:51}
+#ammo-display .weapon-name{font-size:10px;color:#a855f7;letter-spacing:2px;margin-bottom:2px}
+#ammo-display .ammo-count{font-size:36px;font-weight:800;color:#e0e0e0}
+#ammo-display .ammo-count span{color:#555;font-weight:400}
+#score-display{position:fixed;top:20px;right:30px;text-align:right;z-index:51}
+#score-display .kills{font-size:36px;font-weight:800;color:#00f0ff}
+#score-display .kills-label{font-size:10px;color:#666;letter-spacing:2px}
+#game-title{position:fixed;top:20px;left:30px;z-index:51}
+#game-title h2{font-size:14px;font-weight:700;color:#a855f7;letter-spacing:3px}
+#game-title .mode{font-size:10px;color:#555;letter-spacing:1px}
+#weapon-wheel{position:fixed;bottom:80px;right:30px;display:flex;gap:6px;z-index:51}
+.weapon-slot{width:48px;height:36px;background:rgba(20,20,40,0.7);border:1px solid #222;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#555;letter-spacing:1px}
+.weapon-slot.active{border-color:#00f0ff;color:#00f0ff;background:rgba(0,240,255,0.08)}
+#powerup-flash{position:fixed;inset:0;pointer-events:none;z-index:49;opacity:0;transition:opacity .3s}
+#damage-flash{position:fixed;inset:0;background:radial-gradient(ellipse,transparent 50%,rgba(255,0,50,0.3));pointer-events:none;z-index:49;opacity:0;transition:opacity .15s}
+#hit-marker{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:52;pointer-events:none;opacity:0;transition:opacity .1s}
+#hit-marker div{position:absolute;width:12px;height:2px;background:#ff3366}
+#hit-marker .a{transform:rotate(45deg) translate(4px,0)}
+#hit-marker .b{transform:rotate(-45deg) translate(4px,0)}
+#hit-marker .c{transform:rotate(225deg) translate(4px,0)}
+#hit-marker .d{transform:rotate(-225deg) translate(4px,0)}
+#wave-banner{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);z-index:55;text-align:center;opacity:0;transition:opacity .5s;pointer-events:none}
+#wave-banner h2{font-size:48px;font-weight:800;color:#00f0ff;text-shadow:0 0 40px rgba(0,240,255,0.5);letter-spacing:6px}
+#wave-banner p{color:#888;font-size:14px;margin-top:8px}
+</style>
+</head>
+<body>
+<div id="blocker">
+  <div id="menu">
+    <h1>SHADOW STRIKE</h1>
+    <div class="tagline">Strike from the shadows</div>
+    <div class="designers">Designed by Jake &amp; Tom</div>
+    <button class="start-btn" id="startBtn">PLAY NOW</button>
+    <div class="controls">
+      <span>WASD</span> Move &middot; <span>MOUSE</span> Look &middot; <span>CLICK</span> Shoot<br>
+      <span>1-5</span> Switch Weapons &middot; <span>R</span> Reload &middot; <span>ESC</span> Pause
+    </div>
+  </div>
+</div>
+<div id="hud">
+  <div id="crosshair"><div class="h h1"></div><div class="h h2"></div><div class="v v1"></div><div class="v v2"></div></div>
+  <div id="health-bar"><div class="label">HEALTH</div><div class="bar"><div class="fill" id="hpFill"></div></div><div id="health-val">100</div></div>
+  <div id="ammo-display"><div class="weapon-name" id="weaponName">ASSAULT RIFLE</div><div class="ammo-count"><span id="ammoCount">30</span> <span>/ 30</span></div></div>
+  <div id="score-display"><div class="kills" id="killCount">0</div><div class="kills-label">KILLS</div></div>
+  <div id="game-title"><h2>SHADOW STRIKE</h2><div class="mode">FREE FOR ALL</div></div>
+  <div id="weapon-wheel">
+    <div class="weapon-slot active" data-idx="0">AR</div>
+    <div class="weapon-slot" data-idx="1">SHG</div>
+    <div class="weapon-slot" data-idx="2">SNP</div>
+    <div class="weapon-slot" data-idx="3">RPG</div>
+    <div class="weapon-slot" data-idx="4">RAY</div>
+  </div>
+  <div id="powerup-flash"></div>
+  <div id="damage-flash"></div>
+  <div id="hit-marker"><div class="a"></div><div class="b"></div><div class="c"></div><div class="d"></div></div>
+  <div id="wave-banner"><h2 id="waveText"></h2><p id="waveSubtext"></p></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+// --- GAME CONFIG ---
+const WEAPONS = [
+  {name:"ASSAULT RIFLE",short:"AR",color:0x00f0ff,damage:15,fireRate:100,ammo:30,maxAmmo:30,spread:0.03,projectileSpeed:2,sound:"ar",reloadTime:1500},
+  {name:"SHOTGUN",short:"SHG",color:0xff6633,damage:8,fireRate:600,ammo:8,maxAmmo:8,spread:0.12,pellets:6,projectileSpeed:1.5,sound:"shg",reloadTime:2000},
+  {name:"SNIPER RIFLE",short:"SNP",color:0x33ff66,damage:80,fireRate:1200,ammo:5,maxAmmo:5,spread:0.002,projectileSpeed:4,sound:"snp",reloadTime:2500},
+  {name:"ROCKET LAUNCHER",short:"RPG",color:0xff3366,damage:100,fireRate:1500,ammo:3,maxAmmo:3,spread:0.01,projectileSpeed:0.8,explosive:true,sound:"rpg",reloadTime:3000},
+  {name:"RAY GUN",short:"RAY",color:0xa855f7,damage:25,fireRate:200,ammo:20,maxAmmo:20,spread:0.02,projectileSpeed:3,sound:"ray",reloadTime:1800}
+];
+
+const ENEMY_TYPES = [
+  {name:"Drone",hp:40,speed:0.04,size:0.6,color:0xff0044,score:10},
+  {name:"Guard",hp:80,speed:0.025,size:0.8,color:0xff6600,score:20},
+  {name:"Heavy",hp:150,speed:0.015,size:1.1,color:0xcc00ff,score:35}
+];
+
+const POWERUP_TYPES = [
+  {name:"SPEED BOOST",color:0x00ff88,duration:5000,effect:"speed"},
+  {name:"DOUBLE DAMAGE",color:0xff3366,duration:5000,effect:"damage"},
+  {name:"SHIELD",color:0x00aaff,duration:4000,effect:"shield"}
+];
+
+// --- STATE ---
+let scene, camera, renderer;
+let moveForward=false, moveBackward=false, moveLeft=false, moveRight=false;
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let pitch=0, yaw=0;
+let isLocked=false;
+let currentWeapon=0;
+let ammo=[30,8,5,3,20];
+let hp=100;
+let kills=0;
+let canShoot=true;
+let isReloading=false;
+let enemies=[];
+let projectiles=[];
+let powerups=[];
+let activePowerups={speed:0,damage:0,shield:0};
+let buildings=[];
+let wave=1;
+let enemiesPerWave=5;
+let enemiesAlive=0;
+let gameStarted=false;
+let lastShot=0;
+let clock;
+const raycaster = new THREE.Raycaster();
+
+// --- AUDIO (simple oscillator-based) ---
+const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+function playSound(type){
+  const o=audioCtx.createOscillator();
+  const g=audioCtx.createGain();
+  o.connect(g);g.connect(audioCtx.destination);
+  g.gain.value=0.08;
+  if(type==="ar"){o.frequency.value=800;o.type="square";g.gain.value=0.06;o.start();g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.08);o.stop(audioCtx.currentTime+0.08)}
+  else if(type==="shg"){o.frequency.value=200;o.type="sawtooth";g.gain.value=0.1;o.start();g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.15);o.stop(audioCtx.currentTime+0.15)}
+  else if(type==="snp"){o.frequency.value=1200;o.type="sine";g.gain.value=0.07;o.start();g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.2);o.stop(audioCtx.currentTime+0.2)}
+  else if(type==="rpg"){o.frequency.value=100;o.type="sawtooth";g.gain.value=0.12;o.start();o.frequency.exponentialRampToValueAtTime(40,audioCtx.currentTime+0.5);g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.5);o.stop(audioCtx.currentTime+0.5)}
+  else if(type==="ray"){o.frequency.value=2000;o.type="sine";g.gain.value=0.05;o.start();o.frequency.exponentialRampToValueAtTime(400,audioCtx.currentTime+0.15);g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.15);o.stop(audioCtx.currentTime+0.15)}
+  else if(type==="hit"){o.frequency.value=300;o.type="triangle";g.gain.value=0.06;o.start();g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.1);o.stop(audioCtx.currentTime+0.1)}
+  else if(type==="kill"){o.frequency.value=600;o.type="sine";g.gain.value=0.08;o.start();o.frequency.exponentialRampToValueAtTime(1200,audioCtx.currentTime+0.15);g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.2);o.stop(audioCtx.currentTime+0.2)}
+  else if(type==="powerup"){o.frequency.value=400;o.type="sine";g.gain.value=0.08;o.start();o.frequency.exponentialRampToValueAtTime(1600,audioCtx.currentTime+0.3);g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.4);o.stop(audioCtx.currentTime+0.4)}
+  else if(type==="damage"){o.frequency.value=150;o.type="sawtooth";g.gain.value=0.1;o.start();g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.12);o.stop(audioCtx.currentTime+0.12)}
+  else if(type==="explosion"){o.frequency.value=60;o.type="sawtooth";g.gain.value=0.15;o.start();g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.6);o.stop(audioCtx.currentTime+0.6)}
+}
+
+// --- INIT ---
+function init(){
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x080818);
+  scene.fog=new THREE.FogExp2(0x080818,0.012);
+
+  camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,500);
+  camera.position.set(0,1.7,0);
+
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=0.8;
+  document.body.appendChild(renderer.domElement);
+
+  // Lighting - Cyberpunk neon atmosphere
+  const ambient=new THREE.AmbientLight(0x111133,0.3);
+  scene.add(ambient);
+
+  const mainLight=new THREE.DirectionalLight(0x6644aa,0.4);
+  mainLight.position.set(20,40,20);
+  mainLight.castShadow=true;
+  mainLight.shadow.mapSize.width=1024;
+  mainLight.shadow.mapSize.height=1024;
+  mainLight.shadow.camera.near=0.5;
+  mainLight.shadow.camera.far=100;
+  mainLight.shadow.camera.left=-50;
+  mainLight.shadow.camera.right=50;
+  mainLight.shadow.camera.top=50;
+  mainLight.shadow.camera.bottom=-50;
+  scene.add(mainLight);
+
+  // Neon point lights
+  const neonColors=[0x00f0ff,0xff0066,0xa855f7,0x00ff88,0xff6600];
+  for(let i=0;i<12;i++){
+    const pl=new THREE.PointLight(neonColors[i%neonColors.length],2,25);
+    pl.position.set((Math.random()-0.5)*80,3+Math.random()*8,(Math.random()-0.5)*80);
+    scene.add(pl);
+  }
+
+  buildCyberpunkMap();
+
+  clock=new THREE.Clock();
+
+  // Events
+  document.getElementById("startBtn").addEventListener("click",startGame);
+  document.addEventListener("keydown",onKeyDown);
+  document.addEventListener("keyup",onKeyUp);
+  document.addEventListener("mousedown",onMouseDown);
+  document.addEventListener("mousemove",onMouseMove);
+  document.addEventListener("pointerlockchange",onPointerLock);
+  window.addEventListener("resize",onResize);
+
+  animate();
+}
+
+function buildCyberpunkMap(){
+  // Ground - dark with grid lines
+  const groundGeo=new THREE.PlaneGeometry(120,120);
+  const groundMat=new THREE.MeshStandardMaterial({color:0x0a0a1a,roughness:0.9});
+  const ground=new THREE.Mesh(groundGeo,groundMat);
+  ground.rotation.x=-Math.PI/2;
+  ground.receiveShadow=true;
+  scene.add(ground);
+
+  // Grid lines on ground
+  const gridHelper=new THREE.GridHelper(120,60,0x111133,0x0a0a22);
+  scene.add(gridHelper);
+
+  // Cyberpunk buildings (rooftops theme)
+  const buildingData=[
+    {x:-20,z:-20,w:8,h:12,d:8},{x:15,z:-25,w:6,h:18,d:10},{x:-30,z:10,w:10,h:8,d:6},
+    {x:25,z:15,w:7,h:15,d:7},{x:0,z:-35,w:12,h:10,d:8},{x:-15,z:30,w:9,h:20,d:9},
+    {x:35,z:-10,w:6,h:14,d:12},{x:-35,z:-30,w:8,h:16,d:8},{x:10,z:35,w:10,h:11,d:6},
+    {x:40,z:30,w:7,h:22,d:7},{x:-40,z:-5,w:6,h:9,d:10},{x:5,z:10,w:5,h:6,d:5},
+    {x:-10,z:-10,w:4,h:4,d:4},{x:20,z:-5,w:3,h:3,d:6},{x:-25,z:20,w:6,h:5,d:4}
+  ];
+
+  const neonAccents=[0x00f0ff,0xff0066,0xa855f7,0x00ff88];
+
+  buildingData.forEach((b,i)=>{
+    // Main building
+    const geo=new THREE.BoxGeometry(b.w,b.h,b.d);
+    const mat=new THREE.MeshStandardMaterial({color:0x111128,roughness:0.7,metalness:0.3});
+    const mesh=new THREE.Mesh(geo,mat);
+    mesh.position.set(b.x,b.h/2,b.z);
+    mesh.castShadow=true;
+    mesh.receiveShadow=true;
+    scene.add(mesh);
+    buildings.push(mesh);
+
+    // Neon trim on top
+    const trimGeo=new THREE.BoxGeometry(b.w+0.2,0.15,b.d+0.2);
+    const trimMat=new THREE.MeshBasicMaterial({color:neonAccents[i%neonAccents.length]});
+    const trim=new THREE.Mesh(trimGeo,trimMat);
+    trim.position.set(b.x,b.h+0.08,b.z);
+    scene.add(trim);
+
+    // Window lights (small emissive boxes)
+    const windowColor=neonAccents[i%neonAccents.length];
+    for(let wy=1;wy<b.h-1;wy+=2.5){
+      for(let wx=-b.w/2+1;wx<b.w/2;wx+=2){
+        if(Math.random()>0.4){
+          const wGeo=new THREE.PlaneGeometry(0.8,1.2);
+          const wMat=new THREE.MeshBasicMaterial({color:windowColor,transparent:true,opacity:0.3+Math.random()*0.4});
+          // Front face
+          const wMesh=new THREE.Mesh(wGeo,wMat);
+          wMesh.position.set(b.x+wx,wy,b.z+b.d/2+0.01);
+          scene.add(wMesh);
+          // Back face
+          const wMesh2=wMesh.clone();
+          wMesh2.position.z=b.z-b.d/2-0.01;
+          wMesh2.rotation.y=Math.PI;
+          scene.add(wMesh2);
+        }
+      }
+    }
+
+    // Rooftop access ramps (some buildings)
+    if(b.h>=8 && i<6){
+      const rampGeo=new THREE.BoxGeometry(2,0.3,b.h*0.7);
+      const rampMat=new THREE.MeshStandardMaterial({color:0x1a1a2e});
+      const ramp=new THREE.Mesh(rampGeo,rampMat);
+      ramp.position.set(b.x+b.w/2+1,b.h*0.35,b.z);
+      ramp.rotation.x=0;
+      const angle=Math.atan2(b.h,b.h*0.7);
+      ramp.rotation.z=-angle*0.3;
+      scene.add(ramp);
+    }
+  });
+
+  // Underground entrance areas (tunnels)
+  for(let i=0;i<4;i++){
+    const tx=(Math.random()-0.5)*60;
+    const tz=(Math.random()-0.5)*60;
+    const tunnelGeo=new THREE.BoxGeometry(4,3,8);
+    const tunnelMat=new THREE.MeshStandardMaterial({color:0x0d0d1a,roughness:0.95});
+    const tunnel=new THREE.Mesh(tunnelGeo,tunnelMat);
+    tunnel.position.set(tx,1.5,tz);
+    scene.add(tunnel);
+    buildings.push(tunnel);
+
+    // Neon entrance strip
+    const stripGeo=new THREE.BoxGeometry(4.2,0.1,0.1);
+    const stripMat=new THREE.MeshBasicMaterial({color:0xff0066});
+    const strip=new THREE.Mesh(stripGeo,stripMat);
+    strip.position.set(tx,3,tz+4);
+    scene.add(strip);
+  }
+
+  // Crate cover objects
+  for(let i=0;i<25;i++){
+    const cx=(Math.random()-0.5)*80;
+    const cz=(Math.random()-0.5)*80;
+    const cs=0.8+Math.random()*1.2;
+    const crateGeo=new THREE.BoxGeometry(cs,cs,cs);
+    const crateMat=new THREE.MeshStandardMaterial({color:0x1a1a30,roughness:0.8});
+    const crate=new THREE.Mesh(crateGeo,crateMat);
+    crate.position.set(cx,cs/2,cz);
+    crate.castShadow=true;
+    scene.add(crate);
+    buildings.push(crate);
+  }
+
+  // Invisible walls (boundary)
+  const wallMat=new THREE.MeshBasicMaterial({visible:false});
+  [[-60,0,0,1,10,120],[60,0,0,1,10,120],[0,0,-60,120,10,1],[0,0,60,120,10,1]].forEach(w=>{
+    const wg=new THREE.BoxGeometry(w[3],w[4],w[5]);
+    const wm=new THREE.Mesh(wg,wallMat);
+    wm.position.set(w[0],w[4]/2,w[2]);
+    scene.add(wm);
+    buildings.push(wm);
+  });
+}
+
+// --- POINTER LOCK ---
+function startGame(){
+  document.body.requestPointerLock();
+  audioCtx.resume();
+}
+function onPointerLock(){
+  isLocked=!!document.pointerLockElement;
+  document.getElementById("blocker").style.display=isLocked?"none":"flex";
+  if(isLocked&&!gameStarted){
+    gameStarted=true;
+    showWaveBanner("SHADOW STRIKE","Get ready...");
+    setTimeout(()=>spawnWave(),2000);
+  }
+}
+
+// --- INPUT ---
+function onKeyDown(e){
+  if(!isLocked)return;
+  switch(e.code){
+    case"KeyW":moveForward=true;break;
+    case"KeyS":moveBackward=true;break;
+    case"KeyA":moveLeft=true;break;
+    case"KeyD":moveRight=true;break;
+    case"Digit1":switchWeapon(0);break;
+    case"Digit2":switchWeapon(1);break;
+    case"Digit3":switchWeapon(2);break;
+    case"Digit4":switchWeapon(3);break;
+    case"Digit5":switchWeapon(4);break;
+    case"KeyR":reload();break;
+  }
+}
+function onKeyUp(e){
+  switch(e.code){
+    case"KeyW":moveForward=false;break;
+    case"KeyS":moveBackward=false;break;
+    case"KeyA":moveLeft=false;break;
+    case"KeyD":moveRight=false;break;
+  }
+}
+function onMouseMove(e){
+  if(!isLocked)return;
+  yaw-=e.movementX*0.002;
+  pitch-=e.movementY*0.002;
+  pitch=Math.max(-Math.PI/2+0.1,Math.min(Math.PI/2-0.1,pitch));
+  camera.rotation.order="YXZ";
+  camera.rotation.y=yaw;
+  camera.rotation.x=pitch;
+}
+function onMouseDown(e){
+  if(!isLocked||e.button!==0)return;
+  shoot();
+}
+
+// --- WEAPONS ---
+function switchWeapon(idx){
+  if(idx===currentWeapon||isReloading)return;
+  currentWeapon=idx;
+  updateHUD();
+  document.querySelectorAll(".weapon-slot").forEach((el,i)=>{
+    el.classList.toggle("active",i===idx);
+  });
+}
+function reload(){
+  if(isReloading)return;
+  const w=WEAPONS[currentWeapon];
+  if(ammo[currentWeapon]>=w.maxAmmo)return;
+  isReloading=true;
+  document.getElementById("weaponName").textContent="RELOADING...";
+  setTimeout(()=>{
+    ammo[currentWeapon]=w.maxAmmo;
+    isReloading=false;
+    updateHUD();
+  },w.reloadTime);
+}
+function shoot(){
+  const now=performance.now();
+  const w=WEAPONS[currentWeapon];
+  if(now-lastShot<w.fireRate||ammo[currentWeapon]<=0||isReloading||!canShoot)return;
+  lastShot=now;
+  ammo[currentWeapon]--;
+  playSound(w.sound);
+
+  const pelletCount=w.pellets||1;
+  for(let p=0;p<pelletCount;p++){
+    const dir=new THREE.Vector3(0,0,-1);
+    dir.applyAxisAngle(new THREE.Vector3(1,0,0),pitch+(Math.random()-0.5)*w.spread);
+    dir.applyAxisAngle(new THREE.Vector3(0,1,0),yaw+(Math.random()-0.5)*w.spread);
+
+    const projGeo=new THREE.SphereGeometry(w.explosive?0.15:0.05,4,4);
+    const projMat=new THREE.MeshBasicMaterial({color:w.color});
+    const proj=new THREE.Mesh(projGeo,projMat);
+    proj.position.copy(camera.position);
+    proj.userData={dir:dir.clone(),speed:w.projectileSpeed,damage:w.damage*(activePowerups.damage>Date.now()?2:1),explosive:!!w.explosive,life:0};
+    scene.add(proj);
+    projectiles.push(proj);
+
+    // Muzzle flash (trail)
+    const trailGeo=new THREE.CylinderGeometry(0.01,0.03,0.5,4);
+    const trailMat=new THREE.MeshBasicMaterial({color:w.color,transparent:true,opacity:0.6});
+    const trail=new THREE.Mesh(trailGeo,trailMat);
+    trail.position.copy(camera.position).add(dir.clone().multiplyScalar(0.5));
+    trail.lookAt(camera.position.clone().add(dir));
+    trail.rotation.x+=Math.PI/2;
+    scene.add(trail);
+    setTimeout(()=>scene.remove(trail),50);
+  }
+
+  if(ammo[currentWeapon]<=0){
+    setTimeout(reload,300);
+  }
+  updateHUD();
+}
+
+// --- ENEMIES ---
+function spawnWave(){
+  const count=enemiesPerWave+wave*2;
+  for(let i=0;i<count;i++){
+    setTimeout(()=>spawnEnemy(),i*400);
+  }
+  enemiesAlive=count;
+  showWaveBanner("WAVE "+wave,count+" enemies incoming");
+}
+function spawnEnemy(){
+  const typeIdx=wave>=3?Math.floor(Math.random()*3):(wave>=2?Math.floor(Math.random()*2):0);
+  const type=ENEMY_TYPES[typeIdx];
+  const angle=Math.random()*Math.PI*2;
+  const dist=30+Math.random()*20;
+  const x=Math.cos(angle)*dist;
+  const z=Math.sin(angle)*dist;
+
+  // Enemy body
+  const group=new THREE.Group();
+  const bodyGeo=new THREE.BoxGeometry(type.size*0.6,type.size,type.size*0.4);
+  const bodyMat=new THREE.MeshStandardMaterial({color:type.color,emissive:type.color,emissiveIntensity:0.3,roughness:0.5});
+  const body=new THREE.Mesh(bodyGeo,bodyMat);
+  body.position.y=type.size/2;
+  body.castShadow=true;
+  group.add(body);
+
+  // Eyes (neon)
+  const eyeGeo=new THREE.SphereGeometry(0.08,6,6);
+  const eyeMat=new THREE.MeshBasicMaterial({color:0x00f0ff});
+  const eye1=new THREE.Mesh(eyeGeo,eyeMat);
+  eye1.position.set(-0.12,type.size*0.7,type.size*0.21);
+  group.add(eye1);
+  const eye2=eye1.clone();
+  eye2.position.x=0.12;
+  group.add(eye2);
+
+  // Health bar above head
+  const hbGeo=new THREE.PlaneGeometry(type.size*0.8,0.08);
+  const hbMat=new THREE.MeshBasicMaterial({color:0xff0044,side:THREE.DoubleSide});
+  const hb=new THREE.Mesh(hbGeo,hbMat);
+  hb.position.y=type.size+0.3;
+  group.add(hb);
+  const hbBg=new THREE.Mesh(new THREE.PlaneGeometry(type.size*0.8,0.08),new THREE.MeshBasicMaterial({color:0x220000,side:THREE.DoubleSide}));
+  hbBg.position.y=type.size+0.3;
+  hbBg.position.z=-0.01;
+  group.add(hbBg);
+
+  group.position.set(x,0,z);
+  group.userData={hp:type.hp,maxHp:type.hp,speed:type.speed,type:typeIdx,score:type.score,size:type.size,hpBar:hb,hpBarBg:hbBg,attackCooldown:0,body:body};
+  scene.add(group);
+  enemies.push(group);
+}
+
+// --- POWERUPS ---
+function spawnPowerup(pos){
+  if(Math.random()>0.3)return;
+  const type=POWERUP_TYPES[Math.floor(Math.random()*POWERUP_TYPES.length)];
+  const geo=new THREE.OctahedronGeometry(0.4,0);
+  const mat=new THREE.MeshBasicMaterial({color:type.color,transparent:true,opacity:0.8});
+  const mesh=new THREE.Mesh(geo,mat);
+  mesh.position.copy(pos);
+  mesh.position.y=0.6;
+  mesh.userData={type:type,bobPhase:Math.random()*Math.PI*2};
+  scene.add(mesh);
+  powerups.push(mesh);
+}
+
+function collectPowerup(pu){
+  const effect=pu.userData.type.effect;
+  activePowerups[effect]=Date.now()+pu.userData.type.duration;
+  playSound("powerup");
+
+  const flash=document.getElementById("powerup-flash");
+  flash.style.background=`radial-gradient(ellipse,transparent 40%,rgba(${pu.userData.type.color===0x00ff88?"0,255,136":pu.userData.type.color===0xff3366?"255,51,102":"0,170,255"},0.15))`;
+  flash.style.opacity="1";
+  setTimeout(()=>{flash.style.opacity="0"},300);
+
+  scene.remove(pu);
+  powerups.splice(powerups.indexOf(pu),1);
+}
+
+// --- COLLISIONS ---
+function checkCollision(pos,radius){
+  for(const b of buildings){
+    const box=new THREE.Box3().setFromObject(b);
+    const closest=new THREE.Vector3(
+      Math.max(box.min.x,Math.min(pos.x,box.max.x)),
+      Math.max(box.min.y,Math.min(pos.y,box.max.y)),
+      Math.max(box.min.z,Math.min(pos.z,box.max.z))
+    );
+    if(closest.distanceTo(pos)<radius)return true;
+  }
+  return false;
+}
+
+// --- EXPLOSION ---
+function createExplosion(pos){
+  playSound("explosion");
+  const geo=new THREE.SphereGeometry(3,8,8);
+  const mat=new THREE.MeshBasicMaterial({color:0xff4400,transparent:true,opacity:0.7});
+  const exp=new THREE.Mesh(geo,mat);
+  exp.position.copy(pos);
+  scene.add(exp);
+  let frame=0;
+  const expandAnim=()=>{
+    frame++;
+    exp.scale.multiplyScalar(1.08);
+    mat.opacity*=0.9;
+    if(frame<20)requestAnimationFrame(expandAnim);
+    else scene.remove(exp);
+  };
+  expandAnim();
+
+  // Damage nearby enemies
+  enemies.forEach(e=>{
+    if(e.position.distanceTo(pos)<5){
+      damageEnemy(e,80);
+    }
+  });
+}
+
+// --- DAMAGE ---
+function damageEnemy(enemy,dmg){
+  enemy.userData.hp-=dmg;
+  playSound("hit");
+
+  // Hit marker
+  const hm=document.getElementById("hit-marker");
+  hm.style.opacity="1";
+  setTimeout(()=>{hm.style.opacity="0"},100);
+
+  // Update hp bar
+  const pct=Math.max(0,enemy.userData.hp/enemy.userData.maxHp);
+  enemy.userData.hpBar.scale.x=pct;
+  enemy.userData.hpBar.position.x=(pct-1)*enemy.userData.size*0.4;
+
+  // Flash red
+  if(enemy.userData.body){
+    const origColor=ENEMY_TYPES[enemy.userData.type].color;
+    enemy.userData.body.material.emissive.setHex(0xffffff);
+    enemy.userData.body.material.emissiveIntensity=1;
+    setTimeout(()=>{
+      if(enemy.userData.body){
+        enemy.userData.body.material.emissive.setHex(origColor);
+        enemy.userData.body.material.emissiveIntensity=0.3;
+      }
+    },80);
+  }
+
+  if(enemy.userData.hp<=0){
+    killEnemy(enemy);
+  }
+}
+
+function killEnemy(enemy){
+  playSound("kill");
+  kills+=enemy.userData.score;
+  enemiesAlive--;
+  document.getElementById("killCount").textContent=kills;
+
+  // Death particles
+  for(let i=0;i<8;i++){
+    const pGeo=new THREE.BoxGeometry(0.15,0.15,0.15);
+    const pMat=new THREE.MeshBasicMaterial({color:ENEMY_TYPES[enemy.userData.type].color});
+    const particle=new THREE.Mesh(pGeo,pMat);
+    particle.position.copy(enemy.position);
+    particle.position.y+=enemy.userData.size/2;
+    const vel=new THREE.Vector3((Math.random()-0.5)*0.3,Math.random()*0.2,(Math.random()-0.5)*0.3);
+    scene.add(particle);
+    let f=0;
+    const pAnim=()=>{
+      f++;
+      particle.position.add(vel);
+      vel.y-=0.008;
+      pMat.opacity-=0.03;
+      if(f<30)requestAnimationFrame(pAnim);
+      else scene.remove(particle);
+    };
+    pAnim();
+  }
+
+  spawnPowerup(enemy.position.clone());
+  scene.remove(enemy);
+  enemies.splice(enemies.indexOf(enemy),1);
+
+  if(enemiesAlive<=0){
+    wave++;
+    setTimeout(()=>{
+      showWaveBanner("WAVE "+wave+" CLEAR","Next wave incoming...");
+      setTimeout(spawnWave,2500);
+    },1000);
+  }
+}
+
+function takeDamage(dmg){
+  if(activePowerups.shield>Date.now()){dmg=Math.floor(dmg*0.3)}
+  hp=Math.max(0,hp-dmg);
+  playSound("damage");
+  updateHUD();
+
+  const df=document.getElementById("damage-flash");
+  df.style.opacity="1";
+  setTimeout(()=>{df.style.opacity="0"},150);
+
+  if(hp<=0){
+    isLocked=false;
+    document.exitPointerLock();
+    const menu=document.getElementById("menu");
+    menu.querySelector("h1").textContent="GAME OVER";
+    menu.querySelector(".tagline").textContent="Final score: "+kills+" kills";
+    menu.querySelector(".start-btn").textContent="PLAY AGAIN";
+    document.getElementById("blocker").style.display="flex";
+    // Reset
+    hp=100;kills=0;wave=1;
+    ammo=[30,8,5,3,20];
+    enemies.forEach(e=>scene.remove(e));
+    enemies=[];
+    projectiles.forEach(p=>scene.remove(p));
+    projectiles=[];
+    powerups.forEach(p=>scene.remove(p));
+    powerups=[];
+    gameStarted=false;
+    camera.position.set(0,1.7,0);
+    yaw=0;pitch=0;
+    updateHUD();
+    document.getElementById("killCount").textContent="0";
+  }
+}
+
+// --- HUD ---
+function updateHUD(){
+  const w=WEAPONS[currentWeapon];
+  document.getElementById("weaponName").textContent=isReloading?"RELOADING...":w.name;
+  document.getElementById("ammoCount").textContent=ammo[currentWeapon];
+  document.getElementById("hpFill").style.width=hp+"%";
+  document.getElementById("health-val").textContent=hp;
+  const hpColor=hp>60?"#00f0ff":hp>30?"#ffaa00":"#ff3366";
+  document.getElementById("health-val").style.color=hpColor;
+  document.getElementById("hpFill").style.background=`linear-gradient(90deg,${hp>30?"#00f0ff":"#ff3366"},${hpColor})`;
+}
+
+function showWaveBanner(text,sub){
+  const banner=document.getElementById("wave-banner");
+  document.getElementById("waveText").textContent=text;
+  document.getElementById("waveSubtext").textContent=sub;
+  banner.style.opacity="1";
+  setTimeout(()=>{banner.style.opacity="0"},2500);
+}
+
+// --- GAME LOOP ---
+function animate(){
+  requestAnimationFrame(animate);
+  if(!isLocked){renderer.render(scene,camera);return}
+
+  const delta=Math.min(clock.getDelta(),0.05);
+  const speedMult=activePowerups.speed>Date.now()?1.8:1;
+
+  // Movement
+  direction.z=Number(moveForward)-Number(moveBackward);
+  direction.x=Number(moveRight)-Number(moveLeft);
+  direction.normalize();
+
+  velocity.x-=velocity.x*8*delta;
+  velocity.z-=velocity.z*8*delta;
+
+  const moveSpeed=25*speedMult;
+  if(moveForward||moveBackward)velocity.z-=direction.z*moveSpeed*delta;
+  if(moveLeft||moveRight)velocity.x-=direction.x*moveSpeed*delta;
+
+  const forward=new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0),yaw);
+  const right=new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0),yaw);
+
+  const newPos=camera.position.clone();
+  newPos.add(forward.multiplyScalar(-velocity.z*delta));
+  newPos.add(right.multiplyScalar(-velocity.x*delta));
+  newPos.x=Math.max(-58,Math.min(58,newPos.x));
+  newPos.z=Math.max(-58,Math.min(58,newPos.z));
+
+  if(!checkCollision(newPos,0.5)){
+    camera.position.copy(newPos);
+  }
+  camera.position.y=1.7;
+
+  // Projectiles
+  for(let i=projectiles.length-1;i>=0;i--){
+    const p=projectiles[i];
+    p.userData.life++;
+    p.position.add(p.userData.dir.clone().multiplyScalar(p.userData.speed));
+
+    if(p.userData.life>200){
+      scene.remove(p);
+      projectiles.splice(i,1);
+      continue;
+    }
+
+    // Check enemy hits
+    let hit=false;
+    for(const e of enemies){
+      if(p.position.distanceTo(e.position.clone().add(new THREE.Vector3(0,e.userData.size/2,0)))<e.userData.size*0.6){
+        if(p.userData.explosive){
+          createExplosion(p.position.clone());
+        }else{
+          damageEnemy(e,p.userData.damage);
+        }
+        hit=true;
+        break;
+      }
+    }
+
+    // Check wall hits
+    if(!hit&&checkCollision(p.position,0.1)){
+      if(p.userData.explosive)createExplosion(p.position.clone());
+      hit=true;
+    }
+
+    if(hit){
+      scene.remove(p);
+      projectiles.splice(i,1);
+    }
+  }
+
+  // Enemies AI
+  const now=performance.now();
+  enemies.forEach(e=>{
+    const toPlayer=new THREE.Vector3().subVectors(camera.position,e.position);
+    toPlayer.y=0;
+    const dist=toPlayer.length();
+    toPlayer.normalize();
+
+    // Move toward player
+    if(dist>2){
+      const newEPos=e.position.clone().add(toPlayer.multiplyScalar(e.userData.speed*speedMult));
+      if(!checkCollision(newEPos.clone().add(new THREE.Vector3(0,0.5,0)),0.5)){
+        e.position.copy(newEPos);
+      }
+    }
+
+    // Face player
+    e.lookAt(camera.position.x,0,camera.position.z);
+
+    // HP bar faces camera
+    if(e.userData.hpBar){
+      e.userData.hpBar.lookAt(camera.position);
+      e.userData.hpBarBg.lookAt(camera.position);
+    }
+
+    // Attack
+    if(dist<3&&now-e.userData.attackCooldown>1500){
+      e.userData.attackCooldown=now;
+      const dmg=ENEMY_TYPES[e.userData.type].name==="Heavy"?20:ENEMY_TYPES[e.userData.type].name==="Guard"?12:8;
+      takeDamage(dmg);
+    }
+
+    // Slight bob
+    e.position.y=Math.sin(now*0.003+e.id)*0.05;
+  });
+
+  // Powerups
+  powerups.forEach(pu=>{
+    pu.rotation.y+=0.02;
+    pu.position.y=0.6+Math.sin(now*0.003+pu.userData.bobPhase)*0.15;
+
+    if(camera.position.distanceTo(pu.position)<1.5){
+      collectPowerup(pu);
+    }
+  });
+
+  // Health regen (slow)
+  if(hp<100&&hp>0){
+    hp=Math.min(100,hp+0.5*delta);
+    updateHUD();
+  }
+
+  renderer.render(scene,camera);
+}
+
+function onResize(){
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+}
+
+init();
+})();
+</script>
+</body>
+</html>
